@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { fetchSheetData, SheetRow } from '@/lib/sheets';
+import { updateSheetRow } from '@/lib/sheetsApi';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { toast } from 'sonner';
-import { LogOut, RefreshCw, Pencil, X, Check, ExternalLink, Loader2 } from 'lucide-react';
+import { toast } from '@/hooks/use-toast';
+import { RefreshCw, LogOut, Edit2, Save, X } from 'lucide-react';
 
 export const DataTable = () => {
   const { user, signOut } = useAuth();
@@ -14,6 +15,7 @@ export const DataTable = () => {
   const [loading, setLoading] = useState(true);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editedRow, setEditedRow] = useState<SheetRow | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const loadData = async () => {
     setLoading(true);
@@ -26,15 +28,13 @@ export const DataTable = () => {
     loadData();
   }, []);
 
-  const userEmail = user?.email?.toLowerCase();
-
   const canEdit = (row: SheetRow) => {
-    return row.email.toLowerCase() === userEmail;
+    return user?.email?.toLowerCase() === row.email.toLowerCase();
   };
 
-  const handleEdit = (index: number) => {
+  const handleEdit = (index: number, row: SheetRow) => {
     setEditingIndex(index);
-    setEditedRow({ ...data[index] });
+    setEditedRow({ ...row });
   };
 
   const handleCancel = () => {
@@ -42,11 +42,40 @@ export const DataTable = () => {
     setEditedRow(null);
   };
 
-  const handleSave = () => {
-    // Since we can't directly edit Google Sheets without API,
-    // we'll show a message that this is read-only mode
-    toast.info('由於此表格為公開唯讀模式，編輯功能需要連接 Google Sheets API。');
-    handleCancel();
+  const handleSave = async () => {
+    if (!editedRow) return;
+
+    setSaving(true);
+    const result = await updateSheetRow({
+      email: editedRow.email,
+      igAccount: editedRow.igAccount,
+      theme: editedRow.theme,
+      keyword: editedRow.keyword,
+      title: editedRow.title,
+      igLink: editedRow.igLink,
+    });
+
+    if (result.success) {
+      const newData = [...data];
+      if (editingIndex !== null) {
+        newData[editingIndex] = editedRow;
+        setData(newData);
+      }
+      toast({
+        title: '成功',
+        description: result.message,
+      });
+    } else {
+      toast({
+        title: '錯誤',
+        description: result.message,
+        variant: 'destructive',
+      });
+    }
+
+    setSaving(false);
+    setEditingIndex(null);
+    setEditedRow(null);
   };
 
   const handleInputChange = (field: keyof SheetRow, value: string) => {
@@ -55,210 +84,161 @@ export const DataTable = () => {
     }
   };
 
-  const handleSignOut = async () => {
-    await signOut();
-    toast.success('已登出');
-  };
-
   return (
-    <div className="min-h-screen gradient-subtle p-4 md:p-8">
-      <div className="max-w-7xl mx-auto space-y-6 animate-fade-in">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-foreground">IG 資料管理</h1>
-            <p className="text-muted-foreground mt-1">
-              已登入為：<span className="font-medium text-accent-foreground">{user?.email}</span>
-            </p>
-          </div>
-          
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={loadData}
-              disabled={loading}
-              className="gap-2"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              重新載入
-            </Button>
-            <Button
-              variant="outline"
-              onClick={handleSignOut}
-              className="gap-2 hover:bg-destructive/10 hover:text-destructive hover:border-destructive"
-            >
-              <LogOut className="w-4 h-4" />
-              登出
-            </Button>
-          </div>
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <div className="text-sm text-muted-foreground">
+          登入帳號: {user?.email}
         </div>
-
-        {/* Info Card */}
-        <Card className="border-accent bg-accent/30">
-          <CardContent className="py-3">
-            <p className="text-sm text-accent-foreground">
-              您只能編輯電郵地址與您登入帳戶相符的列。其他列為唯讀模式。
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Data Table */}
-        <Card className="shadow-card overflow-hidden">
-          <CardHeader>
-            <CardTitle>資料列表</CardTitle>
-            <CardDescription>
-              共 {data.length} 筆資料 · 可編輯 {data.filter(canEdit).length} 筆
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            {loading ? (
-              <div className="flex items-center justify-center py-20">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
-              </div>
-            ) : data.length === 0 ? (
-              <div className="text-center py-20 text-muted-foreground">
-                暫無資料
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/50">
-                      <TableHead className="font-semibold">電郵</TableHead>
-                      <TableHead className="font-semibold">IG 賬號</TableHead>
-                      <TableHead className="font-semibold">主題</TableHead>
-                      <TableHead className="font-semibold">KEYWORD</TableHead>
-                      <TableHead className="font-semibold">標題</TableHead>
-                      <TableHead className="font-semibold">IG Link</TableHead>
-                      <TableHead className="font-semibold w-[100px]">操作</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {data.map((row, index) => {
-                      const isEditing = editingIndex === index;
-                      const isEditable = canEdit(row);
-                      
-                      return (
-                        <TableRow 
-                          key={index}
-                          className={`
-                            ${isEditable ? 'bg-accent/20 hover:bg-accent/30' : 'hover:bg-muted/30'}
-                            transition-colors
-                          `}
-                        >
-                          <TableCell className="font-medium">
-                            {row.email}
-                          </TableCell>
-                          <TableCell>
-                            {isEditing ? (
-                              <Input
-                                value={editedRow?.igAccount || ''}
-                                onChange={(e) => handleInputChange('igAccount', e.target.value)}
-                                className="h-8"
-                              />
-                            ) : (
-                              row.igAccount
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {isEditing ? (
-                              <Input
-                                value={editedRow?.theme || ''}
-                                onChange={(e) => handleInputChange('theme', e.target.value)}
-                                className="h-8"
-                              />
-                            ) : (
-                              row.theme
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {isEditing ? (
-                              <Input
-                                value={editedRow?.keyword || ''}
-                                onChange={(e) => handleInputChange('keyword', e.target.value)}
-                                className="h-8"
-                              />
-                            ) : (
-                              row.keyword
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {isEditing ? (
-                              <Input
-                                value={editedRow?.title || ''}
-                                onChange={(e) => handleInputChange('title', e.target.value)}
-                                className="h-8"
-                              />
-                            ) : (
-                              row.title
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {isEditing ? (
-                              <Input
-                                value={editedRow?.igLink || ''}
-                                onChange={(e) => handleInputChange('igLink', e.target.value)}
-                                className="h-8"
-                              />
-                            ) : row.igLink ? (
-                              <a 
-                                href={row.igLink}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-primary hover:underline"
-                              >
-                                查看
-                                <ExternalLink className="w-3 h-3" />
-                              </a>
-                            ) : (
-                              '-'
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {isEditable && (
-                              <div className="flex gap-1">
-                                {isEditing ? (
-                                  <>
-                                    <Button
-                                      size="icon"
-                                      variant="ghost"
-                                      className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-100"
-                                      onClick={handleSave}
-                                    >
-                                      <Check className="w-4 h-4" />
-                                    </Button>
-                                    <Button
-                                      size="icon"
-                                      variant="ghost"
-                                      className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                                      onClick={handleCancel}
-                                    >
-                                      <X className="w-4 h-4" />
-                                    </Button>
-                                  </>
-                                ) : (
-                                  <Button
-                                    size="icon"
-                                    variant="ghost"
-                                    className="h-8 w-8 text-primary hover:bg-primary/10"
-                                    onClick={() => handleEdit(index)}
-                                  >
-                                    <Pencil className="w-4 h-4" />
-                                  </Button>
-                                )}
-                              </div>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={loadData} disabled={loading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            重新載入
+          </Button>
+          <Button variant="outline" size="sm" onClick={signOut}>
+            <LogOut className="h-4 w-4 mr-2" />
+            登出
+          </Button>
+        </div>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>我的資料</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex justify-center py-8">
+              <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : data.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              沒有找到資料
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>電郵</TableHead>
+                    <TableHead>IG 賬號</TableHead>
+                    <TableHead>主題</TableHead>
+                    <TableHead>KEYWORD</TableHead>
+                    <TableHead>標題</TableHead>
+                    <TableHead>IG Link</TableHead>
+                    <TableHead>操作</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {data.map((row, index) => (
+                    <TableRow key={index}>
+                      <TableCell>{row.email}</TableCell>
+                      <TableCell>
+                        {editingIndex === index ? (
+                          <Input
+                            value={editedRow?.igAccount || ''}
+                            onChange={(e) => handleInputChange('igAccount', e.target.value)}
+                            className="w-32"
+                          />
+                        ) : (
+                          row.igAccount
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {editingIndex === index ? (
+                          <Input
+                            value={editedRow?.theme || ''}
+                            onChange={(e) => handleInputChange('theme', e.target.value)}
+                            className="w-24"
+                          />
+                        ) : (
+                          row.theme
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {editingIndex === index ? (
+                          <Input
+                            value={editedRow?.keyword || ''}
+                            onChange={(e) => handleInputChange('keyword', e.target.value)}
+                            className="w-24"
+                          />
+                        ) : (
+                          row.keyword
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {editingIndex === index ? (
+                          <Input
+                            value={editedRow?.title || ''}
+                            onChange={(e) => handleInputChange('title', e.target.value)}
+                            className="w-32"
+                          />
+                        ) : (
+                          row.title
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {editingIndex === index ? (
+                          <Input
+                            value={editedRow?.igLink || ''}
+                            onChange={(e) => handleInputChange('igLink', e.target.value)}
+                            className="w-40"
+                          />
+                        ) : (
+                          row.igLink ? (
+                            <a
+                              href={row.igLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary hover:underline"
+                            >
+                              查看
+                            </a>
+                          ) : '-'
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {canEdit(row) ? (
+                          editingIndex === index ? (
+                            <div className="flex gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={handleSave}
+                                disabled={saving}
+                              >
+                                <Save className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={handleCancel}
+                                disabled={saving}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEdit(index, row)}
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </Button>
+                          )
+                        ) : (
+                          <span className="text-muted-foreground text-sm">-</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 };
