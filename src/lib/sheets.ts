@@ -17,8 +17,8 @@ export async function fetchSheetData(): Promise<SheetRow[]> {
     
     const lines = csvText.split('\n').filter(line => line.trim());
     
-    // Skip header rows (first 2 lines based on the sheet structure)
-    const dataLines = lines.slice(2);
+    // Skip only the header row (first line)
+    const dataLines = lines.slice(1);
     
     const rows: SheetRow[] = dataLines.map(line => {
       const values = parseCSVLine(line);
