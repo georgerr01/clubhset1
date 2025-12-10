@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { toast } from 'sonner';
 import { Mail, Lock, Loader2 } from 'lucide-react';
 import { z } from 'zod';
+import { registerUserToSheet } from '@/lib/sheetsApi';
 
 const authSchema = z.object({
   email: z.string().email('請輸入有效的電郵地址'),
@@ -52,6 +53,8 @@ export const AuthForm = () => {
             toast.error(error.message);
           }
         } else {
+          // Add new user to Google Sheet
+          await registerUserToSheet(email);
           toast.success('註冊成功！請查看您的電郵以確認帳戶。');
         }
       }

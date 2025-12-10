@@ -11,7 +11,7 @@ export interface UpdateData {
 
 export async function updateSheetRow(data: UpdateData): Promise<{ success: boolean; message: string }> {
   try {
-    const response = await fetch(APPS_SCRIPT_URL, {
+    await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
       mode: 'no-cors',
       headers: {
@@ -20,11 +20,27 @@ export async function updateSheetRow(data: UpdateData): Promise<{ success: boole
       body: JSON.stringify(data),
     });
 
-    // With no-cors mode, we can't read the response
-    // Assume success if no error thrown
     return { success: true, message: '資料已更新' };
   } catch (error) {
     console.error('Error updating sheet:', error);
     return { success: false, message: '更新失敗，請稍後再試' };
+  }
+}
+
+export async function registerUserToSheet(email: string): Promise<{ success: boolean; message: string }> {
+  try {
+    await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ action: 'register', email }),
+    });
+
+    return { success: true, message: '新用戶已新增' };
+  } catch (error) {
+    console.error('Error registering user to sheet:', error);
+    return { success: false, message: '新增失敗，請稍後再試' };
   }
 }
